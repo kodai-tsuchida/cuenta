@@ -1,16 +1,17 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import type { AppState } from "./types";
 
-const STORAGE_KEY = "cuenta:v1";
+const STORAGE_KEY = "cuenta:v2";
 
 export const initialState: AppState = {
   banks: [
     { id: "bank-mufg", name: "三菱UFJ銀行", balance: 0 },
     { id: "bank-sbi", name: "住信SBI銀行", balance: 0 },
   ],
+  cashOnHand: 0,
   cards: [
     {
       id: "card-saison-gold",
@@ -79,48 +80,66 @@ export const initialState: AppState = {
   roadTo100CardId: "card-amex-platinum",
 };
 
+function normalize(parsed: Partial<AppState>): AppState {
+  return {
+    ...initialState,
+    ...parsed,
+    banks: parsed.banks ?? initialState.banks,
+    cashOnHand: parsed.cashOnHand ?? 0,
+    cards: parsed.cards ?? initialState.cards,
+    upcoming: parsed.upcoming ?? initialState.upcoming,
+    loans: parsed.loans ?? initialState.loans,
+    timeEntries: (parsed.timeEntries ?? initialState.timeEntries).map(
+      (e) => ({
+        ...e,
+        breakMinutes: e.breakMinutes ?? 0,
+      }),
+    ),
+    commuteRoutes: parsed.commuteRoutes ?? initialState.commuteRoutes,
+    croslanExpenses: parsed.croslanExpenses ?? initialState.croslanExpenses,
+    invoiceSettings: {
+      ...initialState.invoiceSettings,
+      ...(parsed.invoiceSettings ?? {}),
+    },
+    journal: parsed.journal ?? initialState.journal,
+    roadTo100Entries: parsed.roadTo100Entries ?? initialState.roadTo100Entries,
+  };
+}
+
 type Listener = () => void;
 
 let state: AppState = initialState;
 let hydrated = false;
 const listeners = new Set<Listener>();
 
-function load(): AppState {
+/** サーバ同期状況(UI に表示) */
+export type SyncStatus =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "saving" }
+  | { kind: "error"; message: string }
+  | { kind: "offline" };
+
+let syncStatus: SyncStatus = { kind: "idle" };
+const statusListeners = new Set<Listener>();
+
+function setStatus(next: SyncStatus) {
+  syncStatus = next;
+  for (const l of statusListeners) l();
+}
+
+function loadFromLocalStorage(): AppState {
   if (typeof window === "undefined") return initialState;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return initialState;
-    const parsed = JSON.parse(raw) as Partial<AppState>;
-    // 既存ユーザーが古い shape を持っていてもクラッシュしないよう、
-    // 足りないフィールドは initialState で補う
-    return {
-      ...initialState,
-      ...parsed,
-      banks: parsed.banks ?? initialState.banks,
-      cards: parsed.cards ?? initialState.cards,
-      upcoming: parsed.upcoming ?? initialState.upcoming,
-      loans: parsed.loans ?? initialState.loans,
-      timeEntries: (parsed.timeEntries ?? initialState.timeEntries).map(
-        (e) => ({
-          ...e,
-          breakMinutes: e.breakMinutes ?? 0,
-        }),
-      ),
-      commuteRoutes: parsed.commuteRoutes ?? initialState.commuteRoutes,
-      croslanExpenses: parsed.croslanExpenses ?? initialState.croslanExpenses,
-      invoiceSettings: {
-        ...initialState.invoiceSettings,
-        ...(parsed.invoiceSettings ?? {}),
-      },
-      journal: parsed.journal ?? initialState.journal,
-      roadTo100Entries: parsed.roadTo100Entries ?? initialState.roadTo100Entries,
-    };
+    return normalize(JSON.parse(raw) as Partial<AppState>);
   } catch {
     return initialState;
   }
 }
 
-function persist() {
+function persistLocal() {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -133,10 +152,10 @@ function emit() {
   for (const l of listeners) l();
 }
 
-function ensureHydrated() {
+function ensureHydratedLocal() {
   if (hydrated) return;
   hydrated = true;
-  state = load();
+  state = loadFromLocalStorage();
 }
 
 function subscribe(listener: Listener) {
@@ -147,7 +166,7 @@ function subscribe(listener: Listener) {
 }
 
 function getSnapshot(): AppState {
-  ensureHydrated();
+  ensureHydratedLocal();
   return state;
 }
 
@@ -155,20 +174,124 @@ function getServerSnapshot(): AppState {
   return initialState;
 }
 
+function subscribeStatus(listener: Listener) {
+  statusListeners.add(listener);
+  return () => {
+    statusListeners.delete(listener);
+  };
+}
+
+function getStatusSnapshot(): SyncStatus {
+  return syncStatus;
+}
+
+function getStatusServerSnapshot(): SyncStatus {
+  return { kind: "idle" };
+}
+
+/* -------------------------- サーバ同期の実装 -------------------------- */
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let savePromise: Promise<void> | null = null;
+
+async function pushToServer() {
+  setStatus({ kind: "saving" });
+  try {
+    const res = await fetch("/api/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+    }
+    setStatus({ kind: "idle" });
+  } catch (err) {
+    setStatus({
+      kind: "error",
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+function scheduleSave() {
+  if (typeof window === "undefined") return;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    savePromise = pushToServer();
+  }, 600);
+}
+
+/** 初回フック用: サーバから取得して上書き */
+async function hydrateFromServer() {
+  setStatus({ kind: "loading" });
+  try {
+    const res = await fetch("/api/state", { cache: "no-store" });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = (await res.json()) as {
+      configured: boolean;
+      state: Partial<AppState> | null;
+    };
+    if (!data.configured) {
+      setStatus({ kind: "offline" });
+      return;
+    }
+    // 空なら、現在のローカルキャッシュをサーバに push
+    if (!data.state || Object.keys(data.state).length === 0) {
+      await pushToServer();
+      return;
+    }
+    state = normalize(data.state);
+    persistLocal();
+    emit();
+    setStatus({ kind: "idle" });
+  } catch (err) {
+    setStatus({
+      kind: "error",
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+let hydratedFromServer = false;
+function hydrateFromServerOnce() {
+  if (hydratedFromServer) return;
+  hydratedFromServer = true;
+  void hydrateFromServer();
+}
+
+/* ---------------------------- 公開 API ---------------------------- */
+
 export function setState(next: AppState | ((s: AppState) => AppState)) {
-  ensureHydrated();
+  ensureHydratedLocal();
   state = typeof next === "function" ? (next as (s: AppState) => AppState)(state) : next;
-  persist();
+  persistLocal();
   emit();
+  scheduleSave();
 }
 
 export function useAppState() {
+  // レンダ後にサーバから取得(初回だけ)
+  useEffect(() => {
+    hydrateFromServerOnce();
+  }, []);
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
-/** `setState` は常に同じ参照なので、そのまま返す。 */
 export function useAppStateSetter() {
   return setState;
+}
+
+export function useSyncStatus(): SyncStatus {
+  return useSyncExternalStore(
+    subscribeStatus,
+    getStatusSnapshot,
+    getStatusServerSnapshot,
+  );
 }
 
 /** ランダムだが衝突しにくい ID を返す(crypto.randomUUID が使えない環境でも動く) */
@@ -185,11 +308,21 @@ export function resetAppState() {
 
 /** 直接 state を取得(バックアップ用) */
 export function getRawState(): AppState {
-  ensureHydrated();
+  ensureHydratedLocal();
   return state;
 }
 
 /** バックアップから復元 */
 export function importState(next: AppState) {
   setState({ ...initialState, ...next });
+}
+
+/** 保存中の処理が残っていれば待つ(ページ遷移前) */
+export async function flushPendingSaves() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    savePromise = pushToServer();
+  }
+  if (savePromise) await savePromise;
 }

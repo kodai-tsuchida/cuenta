@@ -82,7 +82,10 @@ export default function CroslanPage() {
         description="カレンダーで勤務時刻を入れると、月の労働時間・支給額・交通費が自動で合算されます。請求書もこの画面から発行できます。"
         action={
           <>
-            <Link href={`/croslan/invoice?month=${monthKey}`}>
+            <Link
+              href={`/croslan/invoice?month=${monthKey}`}
+              data-mobile="hide"
+            >
               <Button size="sm">
                 <FileText className="size-3.5" />
                 今月の請求書

@@ -9,6 +9,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { SyncIndicator } from "@/components/sync-indicator";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -42,9 +43,12 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r border-border/60 bg-sidebar/95 backdrop-blur-xl print:hidden">
+    <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border/60 bg-sidebar/95 backdrop-blur-xl md:flex print:hidden">
       <div className="px-5 pt-6 pb-5">
-        <p className="section-kicker">Cuenta</p>
+        <div className="flex items-center justify-between">
+          <p className="section-kicker">Cuenta</p>
+          <SyncIndicator />
+        </div>
         <h1 className="mt-2 font-heading text-xl font-semibold leading-tight text-sidebar-foreground">
           個人ダッシュボード
         </h1>
@@ -94,7 +98,7 @@ export function Sidebar() {
 
       <div className="px-4 pt-3 pb-5">
         <div className="rounded-xl bg-muted/60 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-          データはこの端末のブラウザに保存されます。レシートも IndexedDB に残ります。ゾウさん開発タブから定期的にバックアップを取ってください。
+          データは Supabase に同期されます。スマホからも同じデータが見れます。レシートはスマホの撮影からそのまま保存できます。
         </div>
       </div>
     </aside>

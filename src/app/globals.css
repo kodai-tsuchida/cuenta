@@ -154,3 +154,33 @@
       linear-gradient(135deg, color-mix(in oklab, var(--card) 92%, white) 0%, color-mix(in oklab, var(--card) 88%, var(--accent)) 100%);
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* モバイル時は入力UI を読み取り専用の見た目に固定する(編集は PC のみ)    */
+/* ただし data-mobile="keep" が付いた要素は通常通り動作 / data-mobile="hide"  */
+/* が付いた要素は完全に非表示。                                               */
+/* -------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  .ro-on-mobile form {
+    display: none !important;
+  }
+  .ro-on-mobile input:not([data-mobile="keep"]),
+  .ro-on-mobile button:not([data-mobile="keep"]) {
+    pointer-events: none;
+  }
+  .ro-on-mobile input:not([data-mobile="keep"]) {
+    background: transparent !important;
+    border-color: transparent !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  .ro-on-mobile [data-mobile="hide"] {
+    display: none !important;
+  }
+  .ro-on-mobile button[data-mobile="keep"] {
+    pointer-events: auto !important;
+  }
+  .ro-on-mobile input[data-mobile="keep"] {
+    pointer-events: auto !important;
+  }
+}

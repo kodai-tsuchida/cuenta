@@ -108,6 +108,8 @@ export type InvoiceSettings = {
 
 export type AppState = {
   banks: BankAccount[];
+  /** 手持ち現金(銀行口座とは別) */
+  cashOnHand: number;
   cards: CreditCard[];
   upcoming: ScheduledPayment[];
   loans: LoanOut[];

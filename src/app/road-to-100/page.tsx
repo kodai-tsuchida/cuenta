@@ -53,18 +53,7 @@ export default function RoadTo100Page() {
         description="AMEX プラチナで期限までに目標額(既定 100万円)を使うとボーナスポイント。確定した利用と、これから使う予定を合算してあと残りいくら必要かを表示します。"
       />
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="目標"
-          value={formatJPY(state.roadTo100Goal)}
-          hint={`期限: ${state.roadTo100Deadline}`}
-        />
-        <StatCard
-          label="確定 + 予定 合計"
-          value={formatJPY(grandTotal)}
-          hint={`確定 ${formatJPY(actualTotal)} / 予定 ${formatJPY(plannedTotal)}`}
-          tone={grandTotal >= state.roadTo100Goal ? "positive" : "default"}
-        />
+      <section className="grid gap-4 md:grid-cols-3">
         <StatCard
           label="あと必要"
           value={formatJPY(remaining)}
@@ -74,6 +63,12 @@ export default function RoadTo100Page() {
               ? "達成予定です"
               : `${progress.toFixed(1)}% 到達`
           }
+        />
+        <StatCard
+          label="確定 + 予定 合計"
+          value={formatJPY(grandTotal)}
+          hint={`確定 ${formatJPY(actualTotal)} / 予定 ${formatJPY(plannedTotal)}`}
+          tone={grandTotal >= state.roadTo100Goal ? "positive" : "default"}
         />
         <StatCard
           label="期限まで"
@@ -101,15 +96,8 @@ export default function RoadTo100Page() {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-3 rounded-xl border border-border/60 bg-card/70 p-5 shadow-sm sm:grid-cols-2">
-        <label className="space-y-1">
-          <span className="section-kicker">目標金額</span>
-          <MoneyInput
-            value={state.roadTo100Goal}
-            onChange={(v) => set((s) => ({ ...s, roadTo100Goal: v }))}
-          />
-        </label>
-        <label className="space-y-1">
+      <section className="mt-6 rounded-xl border border-border/60 bg-card/70 p-5 shadow-sm">
+        <label className="flex flex-wrap items-center gap-3">
           <span className="section-kicker">期限</span>
           <Input
             type="date"
@@ -117,7 +105,7 @@ export default function RoadTo100Page() {
             onChange={(e) =>
               set((s) => ({ ...s, roadTo100Deadline: e.currentTarget.value }))
             }
-            className="font-mono"
+            className="w-44 font-mono"
           />
         </label>
       </section>

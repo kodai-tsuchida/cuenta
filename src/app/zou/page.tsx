@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle,
+  Cloud,
   Download,
   Image as ImageIcon,
   Plus,
@@ -23,10 +23,10 @@ import {
 import {
   deleteReceipt,
   listReceipts,
-  saveReceipt,
-  type ReceiptRecord,
-} from "@/lib/idb";
-import { downloadBackup, restoreFromFile } from "@/lib/backup";
+  receiptSrc,
+  uploadReceipt,
+  type ReceiptMeta,
+} from "@/lib/receipts-client";
 import { newId, useAppState, useAppStateSetter } from "@/lib/store";
 import {
   formatJPY,
@@ -630,15 +630,19 @@ function JournalTab() {
 /* ------------------------------ Receipts ------------------------------- */
 
 function ReceiptsTab() {
-  const [items, setItems] = useState<ReceiptRecord[]>([]);
+  const [items, setItems] = useState<ReceiptMeta[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
   const refresh = async () => {
     setLoading(true);
     try {
       const list = await listReceipts();
       setItems(list);
+    } catch (err) {
+      alert(`読込失敗: ${(err as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -650,19 +654,20 @@ function ReceiptsTab() {
   }, []);
 
   const handleUpload = async (files: FileList | null) => {
-    if (!files) return;
-    for (const file of Array.from(files)) {
-      await saveReceipt({
-        id: newId(),
-        name: file.name,
-        mime: file.type || "application/octet-stream",
-        size: file.size,
-        addedAt: new Date().toISOString(),
-        blob: file,
-      });
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        await uploadReceipt(file);
+      }
+      await refresh();
+    } catch (err) {
+      alert(`アップロード失敗: ${(err as Error).message}`);
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = "";
+      setUploading(false);
     }
-    if (fileRef.current) fileRef.current.value = "";
-    refresh();
   };
 
   return (
@@ -672,11 +677,11 @@ function ReceiptsTab() {
           <div>
             <h3 className="font-heading text-base font-semibold">レシート保管</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              画像 / PDF をドラッグ&ドロップでアップロード。この端末の IndexedDB に保存されます。
-              ブラウザのデータを削除すると消えるので、定期的にバックアップを取ってください。
+              Supabase Storage に保存されます。スマホからもアップロード可能。どの端末からも同じ画像が見られます。
             </p>
           </div>
-          <div>
+          <div className="flex gap-2">
+            {/* PC 用: ファイル選択(複数可) */}
             <input
               ref={fileRef}
               type="file"
@@ -688,15 +693,40 @@ function ReceiptsTab() {
             <Button
               size="sm"
               onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              data-mobile="keep"
             >
               <Upload className="size-3.5" />
-              ファイルを追加
+              {uploading ? "送信中…" : "ファイル"}
+            </Button>
+            {/* スマホ用: カメラで撮影 */}
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              data-mobile="keep"
+              onChange={(e) => handleUpload(e.target.files)}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => cameraRef.current?.click()}
+              disabled={uploading}
+              className="md:hidden"
+              data-mobile="keep"
+            >
+              <ImageIcon className="size-3.5" />
+              撮影
             </Button>
           </div>
         </div>
 
         {loading ? (
-          <p className="mt-6 text-center text-xs text-muted-foreground">読込中…</p>
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            読込中…
+          </p>
         ) : items.length === 0 ? (
           <div className="mt-6 rounded-lg border border-dashed border-border/60 bg-muted/30 p-8 text-center text-sm text-muted-foreground">
             まだレシートがありません
@@ -717,26 +747,24 @@ function ReceiptItem({
   record,
   onDeleted,
 }: {
-  record: ReceiptRecord;
+  record: ReceiptMeta;
   onDeleted: () => void;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    const u = URL.createObjectURL(record.blob);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [record.blob]);
-
+  const src = receiptSrc(record.id);
   const isImage = record.mime.startsWith("image/");
 
   return (
     <li className="flex flex-col overflow-hidden rounded-lg border border-border/60 bg-background/60">
-      <div className="relative aspect-square bg-muted/40">
-        {isImage && url ? (
+      <a
+        href={src}
+        target="_blank"
+        rel="noreferrer"
+        className="relative aspect-square bg-muted/40"
+      >
+        {isImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={url}
+            src={src}
             alt={record.name}
             className="absolute inset-0 size-full object-cover"
           />
@@ -746,15 +774,15 @@ function ReceiptItem({
             <p className="text-[10px]">{record.mime}</p>
           </div>
         )}
-      </div>
+      </a>
       <div className="flex flex-col gap-1 p-2 text-xs">
         <p className="truncate font-medium">{record.name}</p>
         <p className="text-[10px] text-muted-foreground">
-          {(record.size / 1024).toFixed(0)} KB · {record.addedAt.slice(0, 10)}
+          {(record.size / 1024).toFixed(0)} KB · {record.added_at.slice(0, 10)}
         </p>
         <div className="mt-1 flex justify-between gap-1">
           <a
-            href={url ?? "#"}
+            href={src}
             download={record.name}
             className="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted"
           >
@@ -765,8 +793,12 @@ function ReceiptItem({
             size="icon-sm"
             onClick={async () => {
               if (confirm(`${record.name} を削除しますか?`)) {
-                await deleteReceipt(record.id);
-                onDeleted();
+                try {
+                  await deleteReceipt(record.id);
+                  onDeleted();
+                } catch (err) {
+                  alert(`削除失敗: ${(err as Error).message}`);
+                }
               }
             }}
             aria-label="削除"
@@ -782,79 +814,50 @@ function ReceiptItem({
 /* ------------------------------- Backup -------------------------------- */
 
 function BackupTab() {
-  const [busy, setBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const state = useAppState();
 
-  const handleDownload = async () => {
-    setBusy(true);
-    try {
-      await downloadBackup();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleRestore = async (file: File | null) => {
-    if (!file) return;
-    if (
-      !confirm(
-        "現在のデータ(銀行残高・仕訳帳・レシート等)はすべて上書きされます。続行しますか?",
-      )
-    )
-      return;
-    setBusy(true);
-    try {
-      await restoreFromFile(file);
-      alert("復元しました。ページを再読み込みします。");
-      location.reload();
-    } catch (err) {
-      alert(`復元に失敗しました: ${(err as Error).message}`);
-    } finally {
-      setBusy(false);
-    }
+  const downloadStateJson = () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = (now.getMonth() + 1).toString().padStart(2, "0");
+    const d = now.getDate().toString().padStart(2, "0");
+    a.download = `cuenta-state-${y}${m}${d}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
     <section className="rounded-xl border border-border/60 bg-card/70 p-5 shadow-sm">
       <header className="flex items-start gap-2">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+        <Cloud className="mt-0.5 size-4 shrink-0 text-emerald-600" />
         <div>
           <h3 className="font-heading text-base font-semibold">
-            バックアップ / 復元
+            クラウド同期について
           </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            銀行・クレカ・勤怠・仕訳帳・レシート画像までを1つの JSON ファイルに書き出します。
-            別端末で同じデータを使うときや、ブラウザ更新の前に必ずダウンロードしてください。
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            データは Supabase(サーバ)にリアルタイムで同期されます。別の端末・スマホからも同じデータが見えます。
+            レシート画像は Supabase Storage に保存されるため、ブラウザを消しても残ります。
           </p>
         </div>
       </header>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button onClick={handleDownload} disabled={busy} size="sm">
+        <Button onClick={downloadStateJson} size="sm" variant="outline">
           <Download className="size-3.5" />
-          バックアップをダウンロード
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json"
-          className="hidden"
-          onChange={(e) =>
-            handleRestore(e.target.files?.[0] ?? null).finally(() => {
-              if (fileRef.current) fileRef.current.value = "";
-            })
-          }
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fileRef.current?.click()}
-          disabled={busy}
-        >
-          <Upload className="size-3.5" />
-          バックアップから復元
+          現在の状態を JSON で書き出す(控え用)
         </Button>
       </div>
+      <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
+        ※ Supabase プロジェクトごと削除しない限りデータは残ります。万一のときのために、年に1回くらい「状態を JSON で書き出す」を押して手元に保管しておくと安心です。
+      </p>
     </section>
   );
 }

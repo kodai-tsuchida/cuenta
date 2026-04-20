@@ -24,6 +24,7 @@ export default function IncomePage() {
 
   const {
     bankTotal,
+    handTotal,
     cardsTotal,
     cardsCurrent,
     cardsNext,
@@ -34,6 +35,7 @@ export default function IncomePage() {
     forecast,
   } = useMemo(() => {
     const bankTotal = state.banks.reduce((s, b) => s + b.balance, 0);
+    const handTotal = bankTotal + (state.cashOnHand || 0);
     const cardsCurrent = state.cards.reduce(
       (s, c) => s + (c.currentBilledAmount || 0),
       0,
@@ -51,9 +53,10 @@ export default function IncomePage() {
       .filter((e) => e.date.startsWith(monthKey))
       .reduce((sum, e) => sum + minutesBetween(e.start, e.end), 0);
     const monthSalary = Math.round((monthMinutes / 60) * state.hourlyRate);
-    const forecast = bankTotal + monthSalary - cardsTotal - upcomingTotal;
+    const forecast = handTotal + monthSalary - cardsTotal - upcomingTotal;
     return {
       bankTotal,
+      handTotal,
       cardsTotal,
       cardsCurrent,
       cardsNext,
@@ -75,9 +78,9 @@ export default function IncomePage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="手持ち(銀行合計)"
-          value={formatJPY(bankTotal)}
-          hint="登録した銀行口座の残高の合計"
+          label="手持ち(銀行+現金)"
+          value={formatJPY(handTotal)}
+          hint={`銀行 ${formatJPY(bankTotal)} + 現金 ${formatJPY(state.cashOnHand || 0)}`}
         />
         <StatCard
           label="今月の給与予定"
@@ -224,6 +227,18 @@ function BankPanel() {
           </p>
         ) : null}
       </ul>
+
+      {/* 手持ち現金 */}
+      <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-200/70 bg-amber-50/70 px-3 py-2">
+        <span className="flex-1 text-sm font-medium text-amber-900">
+          手持ち現金
+        </span>
+        <MoneyInput
+          value={state.cashOnHand || 0}
+          onChange={(v) => set((s) => ({ ...s, cashOnHand: v }))}
+          className="w-40 text-right"
+        />
+      </div>
     </Panel>
   );
 }
