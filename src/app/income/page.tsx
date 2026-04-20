@@ -7,7 +7,7 @@ import { MoneyInput } from "@/components/money-input";
 import { PageHeader, StatCard } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAppState, newId } from "@/lib/store";
+import { useAppState, useAppStateSetter, newId } from "@/lib/store";
 import {
   currentMonthKey,
   formatJPY,
