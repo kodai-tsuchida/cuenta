@@ -32,8 +32,10 @@ export default function RootLayout({
     >
       <body className="min-h-full bg-background text-foreground">
         <Sidebar />
-        <div className="ml-60 flex min-h-screen flex-col">
-          <main className="flex-1 px-6 py-8 lg:px-10">{children}</main>
+        <div className="ml-60 flex min-h-screen flex-col print:ml-0">
+          <main className="flex-1 px-6 py-8 lg:px-10 print:p-0">
+            {children}
+          </main>
         </div>
       </body>
     </html>

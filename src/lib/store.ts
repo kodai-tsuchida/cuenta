@@ -42,7 +42,37 @@ export const initialState: AppState = {
   timeEntries: [],
   hourlyRate: 0,
   salaryPayDay: 10,
-  businessTx: [],
+  defaultStart: "10:00",
+  defaultEnd: "19:00",
+  defaultBreakMinutes: 60,
+  defaultWorkType: "事務所",
+  commuteRoutes: [
+    {
+      id: "route-default",
+      name: "家〜会社",
+      roundTripFare: 1360,
+      isDefault: true,
+    },
+  ],
+  croslanExpenses: [],
+  invoiceSettings: {
+    issuerName: "土田 航大",
+    issuerAddress: "〒634-0007 奈良県橿原市葛本町688-20",
+    issuerPhone: "070-2312-6181",
+    issuerEmail: "e10481koudai@gmail.com",
+    bankName: "三菱UFJ銀行",
+    branchName: "橿原支店",
+    branchCode: "134",
+    accountNumber: "0254324",
+    accountHolder: "ツチダ コウダイ",
+    clientName: "株式会社CROSLAN",
+    notes: [
+      "源泉徴収および消費税は考慮しておりません。",
+      "振込手数料は貴社ご負担でお願いいたします。",
+    ],
+    nextInvoiceNumber: 12,
+  },
+  journal: [],
   roadTo100Entries: [],
   roadTo100Deadline: "2026-07-14",
   roadTo100Goal: 1_000_000,
@@ -61,7 +91,8 @@ function load(): AppState {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return initialState;
     const parsed = JSON.parse(raw) as Partial<AppState>;
-    // 足りないフィールドを initialState で補う
+    // 既存ユーザーが古い shape を持っていてもクラッシュしないよう、
+    // 足りないフィールドは initialState で補う
     return {
       ...initialState,
       ...parsed,
@@ -69,8 +100,19 @@ function load(): AppState {
       cards: parsed.cards ?? initialState.cards,
       upcoming: parsed.upcoming ?? initialState.upcoming,
       loans: parsed.loans ?? initialState.loans,
-      timeEntries: parsed.timeEntries ?? initialState.timeEntries,
-      businessTx: parsed.businessTx ?? initialState.businessTx,
+      timeEntries: (parsed.timeEntries ?? initialState.timeEntries).map(
+        (e) => ({
+          ...e,
+          breakMinutes: e.breakMinutes ?? 0,
+        }),
+      ),
+      commuteRoutes: parsed.commuteRoutes ?? initialState.commuteRoutes,
+      croslanExpenses: parsed.croslanExpenses ?? initialState.croslanExpenses,
+      invoiceSettings: {
+        ...initialState.invoiceSettings,
+        ...(parsed.invoiceSettings ?? {}),
+      },
+      journal: parsed.journal ?? initialState.journal,
       roadTo100Entries: parsed.roadTo100Entries ?? initialState.roadTo100Entries,
     };
   } catch {
@@ -139,4 +181,15 @@ export function newId() {
 
 export function resetAppState() {
   setState(initialState);
+}
+
+/** 直接 state を取得(バックアップ用) */
+export function getRawState(): AppState {
+  ensureHydrated();
+  return state;
+}
+
+/** バックアップから復元 */
+export function importState(next: AppState) {
+  setState({ ...initialState, ...next });
 }

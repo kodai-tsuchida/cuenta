@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BriefcaseBusiness,
-  CalendarClock,
+  Building2,
   Rocket,
+  Sparkles,
   Wallet,
 } from "lucide-react";
 
@@ -19,16 +19,16 @@ const nav = [
     icon: Wallet,
   },
   {
-    href: "/time",
-    label: "勤怠管理",
-    description: "時給と稼働時間",
-    icon: CalendarClock,
+    href: "/croslan",
+    label: "CROSLAN",
+    description: "勤怠・経費・請求書",
+    icon: Building2,
   },
   {
-    href: "/business",
-    label: "個人事業",
-    description: "売上と経費",
-    icon: BriefcaseBusiness,
+    href: "/zou",
+    label: "ゾウさん開発",
+    description: "個人事業・確定申告",
+    icon: Sparkles,
   },
   {
     href: "/road-to-100",
@@ -42,7 +42,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r border-border/60 bg-sidebar/95 backdrop-blur-xl">
+    <aside className="fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r border-border/60 bg-sidebar/95 backdrop-blur-xl print:hidden">
       <div className="px-5 pt-6 pb-5">
         <p className="section-kicker">Cuenta</p>
         <h1 className="mt-2 font-heading text-xl font-semibold leading-tight text-sidebar-foreground">
@@ -94,7 +94,7 @@ export function Sidebar() {
 
       <div className="px-4 pt-3 pb-5">
         <div className="rounded-xl bg-muted/60 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-          データはこの端末のブラウザに保存されます。別の端末では別のデータになります。
+          データはこの端末のブラウザに保存されます。レシートも IndexedDB に残ります。ゾウさん開発タブから定期的にバックアップを取ってください。
         </div>
       </div>
     </aside>
